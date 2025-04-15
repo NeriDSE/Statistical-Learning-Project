@@ -4,7 +4,7 @@
 # Linear Regression
 
 mod<-lm(y~m, data=house_data)
-plot(y~m, col="lightskyblue", pch=19, cex=.1,data=house_data)
+plot(y~m, col="lightskyblue", pch=19, cex=.1,data=house_data, main = 'Linear Regression: Median House Value vs Median Income', xlab = 'Income (tens of thousands of dollars)', ylab = 'House Value (dollars)', cex.main= .85)
 abline(mod, col="red3", lwd=3)
 summary(mod) # crazy estimate, definetely associated.
 
@@ -39,7 +39,9 @@ summary(mod5)
 
 
 mod6 <- lm(y~ logm + I(logm^2), data = house_data)
-summary(mod6) # the linear with the squared is basically the same (.005 better), but the log with the squared has the highest r squared, although Idk why it's positive.
+summary(mod6) 
+
+# the linear with the squared is basically the same (.005 better), but the log with the squared has the highest r squared, although Idk why it's positive.
 
 house <- house_data %>% dplyr:: select(-c(log_median_value, house_tier, median_house_value))
 

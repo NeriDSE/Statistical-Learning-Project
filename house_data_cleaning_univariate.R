@@ -14,8 +14,8 @@ library(Hmisc)
 library(leaps)
 library(lmtest)
 library(MASS)
-library("party")
-library("partykit")
+library(party)
+library(partykit)
 library(pls)
 library(plyr)
 library(plotly)
@@ -26,43 +26,55 @@ library(olsrr)
 library(tree)
 library(tidyverse)
 library(sandwich)
-library("PerformanceAnalytics")
+library(PerformanceAnalytics)
 
 # https://www.kaggle.com/datasets/shibumohapatra/house-price
 
 house_data <- read_csv('1553768847-housing.csv')
-View(house_data)
-options(scipen = 999)  # Reduces scientific notation
+# View(house_data)
+# options(scipen = 999)  # Reduces scientific notation
 
-# Data cleaning and re-labeling
+## Data cleaning:
 
 house_data <- house_data %>% dplyr::select(-c(longitude, latitude))
 
-house_data <- house_data[!is.na(house_data$total_bedrooms),] # took out the null values
+# Null values
+colSums(is.na(house_data)) > 0
+sum(is.na(house_data))
+house_data <- house_data[!is.na(house_data$total_bedrooms),] 
 
+# Duplicates
+View(house_data[duplicated(house_data),])
+
+# As factor
 house_data$ocean_proximity <- as.factor(house_data$ocean_proximity)
 
+# Variables
 y <- house_data$median_house_value
 x <- house_data$ocean_proximity
 m <- house_data$median_income
 
+# logs
 house_data$log_median_value <- log(y)
 logy <- house_data$log_median_value
 house_data$log_income <- log(m)
 logm <- house_data$log_income
+
+# House Tier Variable creation
 house_data <- house_data %>% mutate(house_tier = case_when(median_house_value <= 1e+05 ~ 'Low price', median_house_value>1e+05 & median_house_value <= 3e+05 ~ 'Medium Price', median_house_value > 3e+05 ~ 'High Price'))
 z <- house_data$house_tier
 
-house <- house_data %>% dplyr:: select(-c(house_tier))
+# Dataset w/o the log values
+#house <- house_data %>% dplyr:: select(-c(log_median_value, log_income, house_tier))
+house <- house_data
 
-
-# Univariate analysis: 
+## Univariate analysis: 
 
 summary(house_data)
-# median age is tight, relatively new buildings all around
-# total rooms, bedrooms, and households seem skewed, with possible great outliers
-# ocean proximity is very unbalanced, only 5 houses in the islands, and most are at a medium distance from the ocean or far away from it. Always keep in mind the possibility of residential neighborhoods.
-# Median Income is for skewed, obviously
+# median age has a small range, relatively new buildings all around
+# total rooms, bedrooms, and households seem skewed, with possible outliers.
+# Ocean proximity is very unbalanced, only 5 houses in the islands, and most are at a medium distance from the ocean or far away from it. Always keep in mind the possibility of residential neighborhoods.
+# Median Income is skewed
 
 # Histogram of target variable:
 
@@ -74,20 +86,23 @@ ggdensity(house_data, x = "median_house_value", fill = "lightgray", title = "hou
   stat_overlay_normal_density(color = "red", linetype = "dashed")
 
 # 200k is the sample average of the median value of a house in a given block in the California region
-# A quick trip on google says the median hosue price in california in 1990 is 194k, so I'd say this checks out.
-# Few outliers of houses that are clearly of superior value because they come from select neighborhoods where incomes are super high.
+
+# A quick trip on google says the median house price in California in 1990 is 194k, so I'd say this checks out.
+
+# Few outliers which are probably houses that are of superior value because they come from select neighborhoods where incomes are very high.
 
 #set.seed(123)
 #house_data <- house_data %>% sample_n(5000)
 #y <- house_data$median_house_value
 shapiro.test(y[0:5000])
-# actually a decent shapiro p-value
 
 
 
 qqnorm(logy)
-shapiro.test(logy[0:5000]) # much closer to one
-ggqqplot(house_data$log_median_value) # it's much better, almost perfect but there's this weird upperbound
+shapiro.test(logy[0:5000])
+# much closer to one
+ggqqplot(house_data$log_median_value) 
+# it's better, almost perfect but there's this strange upper-bound on values
 
 ggdensity(house_data, x = "log(median_house_value)", fill = "lightgray", title = "log(house value)") +
   stat_overlay_normal_density(color = "red", linetype = "dashed")
@@ -98,15 +113,13 @@ ggdensity(house_data, x = "log(median_house_value)", fill = "lightgray", title =
 
 table(house_data$ocean_proximity)
 par(mar = c(6, 4, 4, 2))  # Bottom, left, top, right margins
-barplot(table(house_data$ocean_proximity), col = c('lightyellow', 'lightblue', 'darkred', 'lightgreen', 'lightpink' ), cex.names = .6, cex.axis = .8) # same conclusions from summary, possibly an initial description.
+barplot(table(house_data$ocean_proximity), col = c('lightyellow', 'lightblue', 'darkred', 'lightgreen', 'lightpink' ), cex.names = .6, cex.axis = .8)
+
+# same conclusions from summary, possibly an initial description.
+
 # Relationship with target variable: does the price of the median house depend on its proximity to the ocean?
 # divide house median value in 3 sectors
 
-
-# House Tier
-
-house_data <- house_data %>% mutate(house_tier = case_when(median_house_value <= 1e+05 ~ 'Low price', median_house_value>1e+05 & median_house_value <= 3e+05 ~ 'Medium Price', median_house_value > 3e+05 ~ 'High Price'))
-z <- house_data$house_tier
 
 hist(logy, main = 'Logarithm of Median House Value', xlab = 'Dollars', col = 'lightpink')
 house_data <- house_data %>% mutate(house_tier_log = case_when(log_median_value <= 11.75 ~ 'Low price', median_house_value>11.75 & log_median_value <= 12.5 ~ 'Medium Price', log_median_value > 12.55 ~ 'High Price'))
@@ -115,7 +128,9 @@ z_2<-house_data$house_tier_log
 
 table(z, x)
 plot(table(z, x), col = c('lightyellow', 'lightblue', 'darkred', 'lightgreen', 'lightpink' ), cex.axis =.3)
-plot(t(table(z, x)), col = c('lightyellow', 'lightblue', 'azure', 'lightgreen', 'lightpink' ), cex.axis =.4) # clearer,  could split the tiers further to see where everything is. It's an intuitive dataset after all.
+plot(t(table(z, x)), col = c('lightyellow', 'lightblue', 'azure', 'lightgreen', 'lightpink' ), cex.axis =.4, main = 'Contingency Table House Value - Ocean Proximity') 
+
+# clearer,  could split the tiers further to see where everything is. It's an intuitive dataset after all.
 margin.table(table(z, x), 1)
 margin.table(table(z, x), 2)
 
@@ -123,8 +138,8 @@ round(prop.table(table(z, x)), 4) # percentages for the whole table
 round(prop.table(table(z, x), 1), 4) # row percentage
 round(prop.table(table(z, x), 2), 4) # column percentage
 
-boxplot(y ~ x, xlab = "Position", ylab="House Value", col="gold", cex.axis=.5)
-plotmeans(y ~ x, xlab = "Position", ylab="House Value", cex.axis=.6)
+boxplot(y ~ x, xlab = "Position", ylab="House Value", col="gold", cex.axis=.5, main = 'Boxplots House Value - Ocean Proximity')
+plotmeans(y ~ x, xlab = "Position", ylab="House Value", cex.axis=.6,  main = 'Means House Value - Ocean Proximity')
 
 Chi_Test <- chisq.test(table(z, x), correct=FALSE)
 Chi_Test 
@@ -157,7 +172,9 @@ ggdensity(house_data, x = "median_income", fill = "lightgray", title = "median i
 
 ggdensity(house_data, x = "log(median_income)", fill = "lightgray", title = "log(income)") +
   stat_overlay_normal_density(color = "red", linetype = "dashed") # It's perfect, just has negative values
- 
+
+hist(log(m), main = 'Log Income', xlab = 'Thousands of Dollars', col = 'chartreuse')
+
 # Splitting it into tiers:
 house_data <- house_data %>% mutate(income_divide = case_when(median_income <= 5 ~ 'Low Income', median_income > 5 ~ 'High Income'))
 d <- house_data$income_divide
@@ -166,6 +183,8 @@ table(d)
 as.factor(d)
 boxplot(y ~ d, xlab = "Income", ylab="House Value", col="peachpuff")
 plotmeans(y ~ d, xlab = "Income", ylab="House Value")
+
+plot(t(table(d, x)), col = c( 'peachpuff', 'azure'), cex.axis =.4, main = 'Contingency Table Income - Ocean Proximity', xlab="Ocean Proximity", ylab = 'Income')
 
 # Scaled densities for the incomes, they match almost perfectly with only a slight lag
 ggplot() +
@@ -181,7 +200,10 @@ ggplot() +
 
 # Check the big correlation matrixes and bivariate ananlysis then get into the more specific specific regressions
 plot(m, logy)
+
 house_numeric <- house_data %>% dplyr:: select(median_house_value, housing_median_age, households, total_rooms, total_bedrooms, population, log_income)
+
+
 
 correlations_house = round(cor(house_numeric),2) 
 symnum(correlations_house, abbr.colnames = FALSE)
@@ -194,5 +216,6 @@ heatmap(x = correlations_house, symm = TRUE, Colv = NA, Rowv = NA, cexRow = 0.7,
 corrplot(correlations_house, type = 'upper', 
          tl.col = "black", tl.srt = 45) # now it works. 
 
-chart.Correlation(house_numeric, histogram=TRUE, pch=19) # I mean... House Value is strongly correlated with log income... that's kind of that. there's nothing else to it really. and it makes perfect sense...
+chart.Correlation(house_numeric, histogram=TRUE, pch=19) 
+
 

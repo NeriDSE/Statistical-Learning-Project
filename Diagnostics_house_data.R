@@ -1,35 +1,37 @@
 # Diagnostics:
-final_model <- mod_loglog$finalModel
+final_model <- mod_improved$finalModel
+
 
 summary(final_model)
 
 # vif: 
 vif(final_model)
-sqrt(vif(final_model)) > 2 # except total_rooms we're decent.
-# I could try a model taking it out, of course, but its VIF is below 5...
+sqrt(vif(final_model)) > 2
+
 
 summary(residuals(final_model)) # mean at 0 is good
 
+
 ggqqplot(residuals(final_model)) # mostly normally distributed
+
 shapiro.test(residuals(final_model)) # residuals are most likely NOT normally distributed, which is a problem
-shapiro.test(step.model$residuals[10001:15000])
 
 train_lm$fit<-fitted.values(final_model)
 train_lm$res<-residuals(final_model)
 
 ggdensity(train_lm, x = "res", fill = "lightgray", title = "Residuals") +
   stat_overlay_normal_density(color = "red", linetype = "dashed")
-# almost a perfect match. wow. so.. who knows.
 
-plot(train_lm$fit, train_lm$res,  xlab= 'Fitted Values', ylab= 'Residuals')
+
+
+plot(train_lm$fit, train_lm$res,  xlab= 'Fitted Values', ylab= 'Residuals', main='Residuals vs Fit. Values for Log  Value', cex.main = .8)
 # no clear pattern. good.
 
 
 # Outliers:
 
-# deleted studentized residuals it seems only 1 really affects the situation
-
-ols_plot_resid_stud(final_model) 
+# deleted studentized residuals 
+ols_plot_resid_stud(final_model)
 
 
 # studentized residuals 
@@ -39,21 +41,24 @@ plot(final_model$fitted.values, studentized_residuals,
      xlab = "Fitted Values", ylab = "Studentized Residuals", 
      main = "Studentized Residuals vs Fitted Values")
 abline(h = 3, col = "red")  
-abline(h = -3, col = "red")  # does ok with fitted values
+abline(h = -3, col = "red")  
+# does ok with fitted values
 
 ols_plot_resid_stand(final_model) 
 # same thing, mostly it's within bounds
 
-ols_plot_resid_stud_fit(final_model) 
+ols_plot_resid_stud_fit(final_model)
 # Deleted Studentized Residual vs Fitted Values Plot shows many outliers.
+
 # It's plausible there are some inefficiencies, many values have an important impact on the model
 # y strange given x
 
 # High Leverage Values
+par(cex = .0005)
 ols_plot_resid_lev(final_model)
+
 # mostly leverage points it seems. and there's a lot of them 
 # x strange given x
-
 
 par(mfrow=c(1,2))
 plot(final_model,4)
@@ -62,7 +67,8 @@ plot(final_model,5)
 # suggests there's not too much distorsion from the outliers and high leverage points
 
 ols_plot_cooksd_bar(final_model) # 1 outlier
-ols_plot_cooksd_chart(final_model) # mostly ok
+ols_plot_cooksd_chart(final_model)
+# mostly ok
 # Distribution of all cook's distance for data point (look further into it)
 
 
@@ -88,7 +94,7 @@ set.seed(42)
 house <- house %>% sample_n(4000)
 
 
-mod_final_rob <- train(log_median_value~. -median_house_value -median_income -households -total_bedrooms,
+mod_final_rob <- train(median_house_value~.  -population -households -total_rooms,
                     data=train_lm,
                     method = 'rlm',
                     trControl = lm_cv
@@ -104,10 +110,15 @@ metrics_improved
 par(mfrow=c(2,2))
 plot(final_model,1)
 plot(final_model,5)
-plot(train_lm$log_income,train_lm$res,  xlab = 'Log Income', ylab = 'Residuals')
-plot(train_lm$log_median_value,train_lm$res, xlab = 'Log House Median Value', ylab = 'Residuals') 
-# What this is for i'm honestly not sure. but that's ok
+plot(train_lm$log_income,train_lm$res,  xlab = 'Median Income', ylab = 'Residuals')
+plot(train_lm$median_house_value,train_lm$res, xlab = 'Median House Value', ylab = 'Residuals') 
 
+
+plot(train_lm$log_rooms,train_lm$res, xlab = 'Total Rooms', ylab = 'Residuals')
+plot(train_lm$housing_median_age,train_lm$res, xlab = 'Median Age', ylab = 'Residuals')
+
+plot(train_lm$ocean_proximity ,train_lm$res, xlab = 'Ocean Proximity', ylab = 'Residuals')
+# rooms and ocean proximity, could be causing hereoskedasticity, to plot ocean proximity it's lowkey a mess.
 
 
 # Homoskedasticity:
@@ -115,14 +126,18 @@ plot(train_lm$log_median_value,train_lm$res, xlab = 'Log House Median Value', yl
 ncvTest(final_model) # p-value far lower than .05, there is presence of heteroskedasticity in the model
 
 
-spreadLevelPlot(final_model) # plots studentized residuals vs. fitted values(didn't we alreay do this?)
+spreadLevelPlot(final_model) # plots studentized residuals vs. fitted values(didn't we already do this?)
 
 
-# we need to calculate robust standard errors (wrong dataset)
-reg.robust<-lm_robust(stack.loss ~ ., stackloss,se_type = "stata")
+# we need to calculate robust standard errors (wrong data set)
+set.seed(42)
+reg.robust<-lm_robust(median_house_value ~ . -total_rooms -population -households, train_lm,se_type = "stata")
 summary(reg.robust)
-
 
 bptest(final_model) # null rejected...
 coeftest(final_model, vcov = vcovHC(final_model, "HC1"))
+
+# Correlation between error and predictors
+cor(train_lm[, c('log_income', "log_rooms", 'housing_median_age')], train_lm$res) 
+?coeftest
 
